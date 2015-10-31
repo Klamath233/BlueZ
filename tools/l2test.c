@@ -46,6 +46,7 @@
 #include "lib/hci.h"
 #include "lib/hci_lib.h"
 #include "lib/l2cap.h"
+#include "l2stats.h"
 
 #include "src/shared/util.h"
 
@@ -134,6 +135,12 @@ static int bdaddr_type = 0;
 struct lookup_table {
 	const char *name;
 	int flag;
+};
+
+struct stats_struct {
+	unsigned long sample_size;
+	float mean;
+	float variance;
 };
 
 static struct lookup_table l2cap_modes[] = {
@@ -876,6 +883,10 @@ static void recv_mode(int sk)
 			uint16_t l;
 			int i;
 
+			/* For logging and statistics. */
+			float rate_Bps;
+			float time_diff;
+
 			p.revents = 0;
 			if (poll(&p, 1, -1) <= 0)
 				return;
@@ -942,8 +953,12 @@ static void recv_mode(int sk)
 
 		timersub(&tv_end, &tv_beg, &tv_diff);
 
+		time_diff = tv2fl(tv_diff);
+		rate_Bps = (float) (total / time_diff);
+
 		syslog(LOG_INFO,"%s%ld bytes in %.2f sec, %.2f kB/s", ts, total,
-			tv2fl(tv_diff), (float)(total / tv2fl(tv_diff) ) / 1024.0);
+			time_diff, rate_Bps / 1024.0);
+
 	}
 }
 
