@@ -363,6 +363,13 @@ static void stats_struct_destroy(struct stats_struct* ss) {
 	free(ss);
 }
 
+static void handle_sigint(int signal) {
+    if (stats != null) {
+        syslog(LOG_INFO, "Average rate is %.2f kB/s.\nVariance is %2f (kB/s)^2.",
+               stats->mean / 1024, stats->variance / (1024 * 1024));
+    }
+}
+
 static int do_connect(char *svr)
 {
 	struct sockaddr_l2 addr;
@@ -937,6 +944,7 @@ static void recv_mode(int sk)
 		/* For logging and statistics. */
 		float rate_Bps;
 		float time_diff;
+        
 		gettimeofday(&tv_beg, NULL);
 		total = 0;
 		while (total < data_size) {
@@ -1012,6 +1020,8 @@ static void recv_mode(int sk)
 
 		time_diff = tv2fl(tv_diff);
 		rate_Bps = (float) (total / time_diff);
+        
+        stats_struct_feed(stats, rate_Bps);
 
 		syslog(LOG_INFO,"%s%ld bytes in %.2f sec, %.2f kB/s", ts, total,
 			time_diff, rate_Bps / 1024.0);
@@ -1421,6 +1431,8 @@ static void usage(void)
 int main(int argc, char *argv[])
 {
 	struct sigaction sa;
+    struct sigaction sa_sigint;
+    
 	int opt, sk, mode = RECV, need_addr = 0;
 
 	bacpy(&bdaddr, BDADDR_ANY);
@@ -1673,6 +1685,11 @@ int main(int argc, char *argv[])
 	sa.sa_flags   = SA_NOCLDSTOP;
 	sigaction(SIGCHLD, &sa, NULL);
 
+    memset(&sa_sigint, 0, sizeof(sa_sigint));
+    sa.sa_handler = handle_sigint;
+    sa.sa_flags   = 0;
+    sigaction(SIGINT, &sa, NULL);
+    
 	openlog("l2test", LOG_PERROR | LOG_PID, LOG_LOCAL0);
 
 	switch (mode) {
