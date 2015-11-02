@@ -46,7 +46,6 @@
 #include "lib/hci.h"
 #include "lib/hci_lib.h"
 #include "lib/l2cap.h"
-#include "l2stats.h"
 
 #include "src/shared/util.h"
 
@@ -72,6 +71,9 @@ enum {
 	INFOREQ,
 	PAIRING,
 };
+
+typedef unsigned long sample_size_t;
+typedef float sample_t;
 
 static unsigned char *buf;
 
@@ -115,6 +117,9 @@ static unsigned long disc_delay = 0;
 /* Initial sequence value when sending frames */
 static int seq_start = 0;
 
+/* Initial stats structure */
+static struct stats_struct *stats = NULL;
+
 static const char *filename = NULL;
 
 static int rfcmode = 0;
@@ -135,12 +140,6 @@ static int bdaddr_type = 0;
 struct lookup_table {
 	const char *name;
 	int flag;
-};
-
-struct stats_struct {
-	unsigned long sample_size;
-	float mean;
-	float variance;
 };
 
 static struct lookup_table l2cap_modes[] = {
@@ -166,6 +165,12 @@ static struct lookup_table bdaddr_types[] = {
 	{ "le_public",	BDADDR_LE_PUBLIC	},
 	{ "le_random",	BDADDR_LE_RANDOM	},
 	{ NULL,		0			},
+};
+
+struct stats_struct {
+	sample_size_t sample_size;
+	sample_t mean;
+	sample_t variance;
 };
 
 static int get_lookup_flag(struct lookup_table *table, char *name)
@@ -306,6 +311,56 @@ static int setopts(int sk, struct l2cap_options *opts)
 
 	return setsockopt(sk, SOL_BLUETOOTH, BT_RCVMTU, &opts->imtu,
 							sizeof(opts->imtu));
+}
+
+static struct stats_struct *stats_struct_new() {
+	struct stats_struct *buf;
+
+	if (!(buf = malloc(sizeof(struct stats_struct)))) {
+		perror("Can't allocate stats struct.");
+		exit(1);
+	}
+
+	buf->sample_size = 0;
+	buf->mean = 0;
+	buf->variance = 0;
+
+	return buf;
+}
+
+static void stats_struct_feed(struct stats_struct *ss, sample_t sample) {
+	if (!ss) {
+		perror("Can't feed sample to null pointer.");
+		exit(1);
+	}
+
+	if (ss->sample_size == 0) {
+		ss->sample_size = 1;
+		ss->mean = sample;
+		ss->variance = 0;
+	} else {
+		sample_size_t old_size = ss->sample_size;
+		sample_t old_mean = ss->mean;
+		sample_t old_variance = ss->variance;
+
+		ss->sample_size++;
+
+		/* Incrementally update the mean. */
+		ss->mean = (old_mean * old_size + sample) / (old_size + 1);
+
+		/* Incrementally update the variance. */
+		ss->variance = (old_size / (sample_t) ss->sample_size) * old_variance * old_variance
+			+ (1 / (sample_t) ss->sample_size) * (sample - old_mean) * (sample - old_mean);
+	}
+}
+
+static void stats_struct_destroy(struct stats_struct* ss) {
+	if (!ss) {
+		perror("Can't free null pointer.");
+		exit(1);
+	}
+
+	free(ss);
 }
 
 static int do_connect(char *svr)
@@ -875,17 +930,19 @@ static void recv_mode(int sk)
 	p.events = POLLIN | POLLERR | POLLHUP;
 
 	seq = 0;
+
+	stats = stats_struct_new();	
+	
 	while (1) {
+		/* For logging and statistics. */
+		float rate_Bps;
+		float time_diff;
 		gettimeofday(&tv_beg, NULL);
 		total = 0;
 		while (total < data_size) {
 			uint32_t sq;
 			uint16_t l;
 			int i;
-
-			/* For logging and statistics. */
-			float rate_Bps;
-			float time_diff;
 
 			p.revents = 0;
 			if (poll(&p, 1, -1) <= 0)
