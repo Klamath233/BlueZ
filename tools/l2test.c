@@ -349,8 +349,8 @@ static void stats_struct_feed(struct stats_struct *ss, sample_t sample) {
 		ss->mean = (old_mean * old_size + sample) / (old_size + 1);
 
 		/* Incrementally update the variance. */
-		ss->variance = (old_size / (sample_t) ss->sample_size) * old_variance * old_variance
-			+ (1 / (sample_t) ss->sample_size) * (sample - old_mean) * (sample - old_mean);
+		ss->variance = ((old_size - 1) / (sample_t) ss->sample_size) * old_variance * old_variance
+			+ (1 / (sample_t) (ss->sample_size + 1)) * (sample - old_mean) * (sample - old_mean);
 	}
 }
 
