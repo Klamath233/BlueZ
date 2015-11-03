@@ -365,8 +365,10 @@ static void stats_struct_destroy(struct stats_struct* ss) {
 
 static void handle_sigint(int signal) {
     if (stats != NULL) {
-        syslog(LOG_INFO, "Average rate is %.2f kB/s.\nVariance is %2f (kB/s)^2.",
-               stats->mean / 1024, stats->variance / (1024 * 1024));
+        syslog(LOG_INFO, "Average rate is %.2f kB/s.",
+               stats->mean / 1024);
+        syslog(LOG_INFO, "Variance is %.2f (kB/s)^2.\n",
+               stats->variance / (1024 * 1024));
     }
 }
 
