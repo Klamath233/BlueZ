@@ -349,8 +349,8 @@ static void stats_struct_feed(struct stats_struct *ss, sample_t sample) {
 		ss->mean = (old_mean * old_size + sample) / (old_size + 1);
 
 		/* Incrementally update the variance. */
-		ss->variance = ((old_size - 1) / (sample_t) ss->sample_size) * old_variance * old_variance
-			+ (1 / (sample_t) (ss->sample_size + 1)) * (sample - old_mean) * (sample - old_mean);
+        /* http://math.stackexchange.com/questions/102978/incremental-computation-of-standard-deviation */
+		ss->variance = ((ss->sample_size - 1) * old_variance + ss->sample_size * (old_mean - ss->mean) * (old_mean - ss->mean) + (sample - ss->mean) * (sample - ss->mean)) / ss->sample_size;
 	}
 }
 
